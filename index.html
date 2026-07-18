@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>CBMEL · Bitácora de Emergencias</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+:root{
+  --bg:#0C0F14; --panel:#151A22; --panel2:#1B212B; --line:#28303C;
+  --ink:#E8ECF2; --muted:#8A94A3; --dim:#5C6675;
+  --red:#E4322B; --amber:#F5871F; --blue:#2E7CE4; --lime:#C6D400;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif}
+body{padding:0 0 40px}
+a{color:inherit}
+.wrap{max-width:1500px;margin:0 auto;padding:0 20px}
+header{border-bottom:1px solid var(--line);background:linear-gradient(180deg,#11151C,#0C0F14);position:sticky;top:0;z-index:1000}
+.hbar{display:flex;align-items:center;gap:18px;padding:14px 20px;max-width:1500px;margin:0 auto}
+.badge{width:44px;height:44px;border-radius:8px;background:var(--red);display:grid;place-items:center;font-family:Oswald;font-weight:700;font-size:20px;color:#fff;letter-spacing:.5px;box-shadow:0 0 0 1px #ff5a4d55,0 4px 18px #e4322b40}
+.htxt h1{font-family:Oswald;font-weight:600;font-size:20px;margin:0;letter-spacing:.6px;text-transform:uppercase}
+.htxt p{margin:2px 0 0;color:var(--muted);font-size:12px;letter-spacing:.3px}
+.hmeta{margin-left:auto;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)}
+.hmeta b{color:var(--ink)}
+.live{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 0 0 #e4322b;animation:pulse 1.8s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 #e4322baa}70%{box-shadow:0 0 0 7px #e4322b00}100%{box-shadow:0 0 0 0 #e4322b00}}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin:20px 0}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;position:relative;overflow:hidden}
+.kpi .lab{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+.kpi .val{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:30px;line-height:1.1;margin-top:6px}
+.kpi .sub{font-size:11px;color:var(--dim);margin-top:2px}
+.kpi::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--red)}
+.kpi.k2::after{background:var(--blue)} .kpi.k3::after{background:var(--amber)}
+.kpi.k4::after{background:var(--lime)} .kpi.k5::after{background:#A15CE0} .kpi.k6::after{background:#25B0A8}
+.grid{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;margin-bottom:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.card h2{font-family:Oswald;font-weight:500;font-size:13px;text-transform:uppercase;letter-spacing:1px;margin:0;padding:13px 16px;border-bottom:1px solid var(--line);color:var(--ink);display:flex;align-items:center;gap:8px}
+.card h2 .tag{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);font-weight:500;letter-spacing:0}
+.cbody{padding:14px 16px}
+#map{height:560px;width:100%;background:#0a0d12}
+.leaflet-container{background:#0a0d12}
+.mapctrl{display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap;align-items:center}
+.chip{font-size:11px;padding:5px 10px;border:1px solid var(--line);border-radius:20px;color:var(--muted);cursor:pointer;user-select:none;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+.chip:hover{border-color:var(--dim);color:var(--ink)}
+.chip.off{opacity:.35}
+.chip i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.toggle{margin-left:auto;display:flex;gap:6px}
+.tbtn{font-size:11px;padding:5px 12px;border:1px solid var(--line);border-radius:6px;color:var(--muted);cursor:pointer;background:var(--panel2)}
+.tbtn.active{color:#fff;border-color:var(--red);background:#e4322b22}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.chartbox{position:relative;height:210px}
+.chartbox.tall{height:320px}
+.tablewrap{max-height:420px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{position:sticky;top:0;background:var(--panel2);text-align:left;padding:9px 12px;font-family:Oswald;font-weight:500;letter-spacing:.5px;text-transform:uppercase;font-size:11px;color:var(--muted);border-bottom:1px solid var(--line)}
+td{padding:9px 12px;border-bottom:1px solid #1f2530;color:var(--ink)}
+tr:hover td{background:#1a2029}
+.pill{font-size:10.5px;padding:2px 8px;border-radius:20px;color:#0c0f14;font-weight:600;white-space:normal;display:inline-block;line-height:1.25}.subcat{font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.25;max-width:300px}
+.mono{font-family:'JetBrains Mono',monospace}
+.rt-ok{color:#5fd08a} .rt-bad{color:#f0864f}
+.leaflet-popup-content-wrapper{background:#11151c;color:var(--ink);border:1px solid var(--line);border-radius:8px}
+.leaflet-popup-tip{background:#11151c}
+.pop b{font-family:Oswald;letter-spacing:.4px}
+.pop .k{color:var(--muted);font-size:11px}
+.footer{color:var(--dim);font-size:11px;margin-top:22px;line-height:1.7;border-top:1px solid var(--line);padding-top:16px}
+.note{background:#161b23;border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:6px;padding:10px 14px;font-size:12px;color:var(--muted);margin-top:14px}
+/* upload panel */
+.upload{border-left:3px solid var(--lime)!important}
+.uprow{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.field input[type=date]{background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--ink);padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:12px}
+.filebtn{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:8px;background:var(--panel2);border:1px dashed var(--dim);border-radius:8px;padding:11px 16px;color:var(--ink);cursor:pointer;font-size:13px}
+.filebtn:hover{border-color:var(--lime);color:#fff}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.gobtn{background:var(--red);border:none;border-radius:8px;color:#fff;font-family:Oswald;font-weight:600;letter-spacing:.5px;text-transform:uppercase;font-size:13px;padding:12px 22px;cursor:pointer}
+.gobtn:hover{background:#f4463e}
+.gobtn:disabled{opacity:.4;cursor:not-allowed}
+.status{font-size:12px;color:var(--muted);margin-top:12px;min-height:18px}
+.status.ok{color:#5fd08a} .status.err{color:#f0864f}
+.hint{font-size:11.5px;color:var(--dim);margin-top:8px;line-height:1.6}
+@media(max-width:1080px){.kpis{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}.two{grid-template-columns:1fr}}
+@media(max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}.hmeta{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="hbar">
+    <div class="badge">CB</div>
+    <div class="htxt">
+      <h1>Bitácora de Emergencias</h1>
+      <p>Cuerpo de Bomberos de Melipilla · Panel operativo geoespacial</p>
+    </div>
+    <div class="hmeta">
+      <div class="live"><span class="dot"></span> Periodo analizado</div>
+      <div><b id="rango"></b></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="kpis" id="kpis"></section>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Mapa de emergencias <span class="tag" id="maptag"></span></h2>
+      <div class="mapctrl" id="legend"></div>
+      <div class="mapctrl" style="border-bottom:none;padding-top:0">
+        <span style="font-size:11px;color:var(--dim)">Filtra por categoría tocando la leyenda.</span>
+        <div class="toggle">
+          <span class="tbtn active" data-mode="markers" id="mMarkers">Puntos</span>
+          <span class="tbtn" data-mode="heat" id="mHeat">Calor</span>
+        </div>
+      </div>
+      <div id="map"></div>
+    </div>
+
+    <div class="card">
+      <h2>Clasificación oficial de emergencias <span class="tag">familia clave 10 · PDF 2022</span></h2>
+      <div class="cbody"><div class="chartbox tall"><canvas id="catChart"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <h2>Emergencias por día</h2>
+      <div class="cbody"><div class="chartbox"><canvas id="dayChart"></canvas></div></div>
+    </div>
+    <div class="card">
+      <h2>Distribución horaria <span class="tag">0–23 h</span></h2>
+      <div class="cbody"><div class="chartbox"><canvas id="hourChart"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Tiempo de respuesta · Carta de control <span class="tag" id="sixtag"></span></h2>
+    <div class="cbody">
+      <div class="chartbox tall"><canvas id="ctrlChart"></canvas></div>
+      <div class="note" id="sixnote"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Detalle de incidentes <span class="tag" id="tabletag"></span></h2>
+    <div class="tablewrap">
+      <table id="tbl"><thead><tr>
+        <th>Fecha / hora</th><th>Clave</th><th>Categoría oficial</th><th>Sector</th>
+        <th>Veh.</th><th>Resp. (min)</th><th>Descripción</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <!-- ====== PANEL DE CARGA ====== -->
+  <div class="card upload" style="margin-top:16px">
+    <h2>Actualizar con nuevos datos <span class="tag">CSV de bitácora</span></h2>
+    <div class="cbody">
+      <div class="uprow">
+        <label class="filebtn">
+          <span id="fileName">📂 Seleccionar CSV…</span>
+          <input type="file" id="csvInput" accept=".csv,text/csv">
+        </label>
+        <div class="field">
+          <label for="desde">Desde</label>
+          <input type="date" id="desde">
+        </div>
+        <div class="field">
+          <label for="hasta">Hasta</label>
+          <input type="date" id="hasta">
+        </div>
+        <button class="gobtn" id="goBtn" disabled>Actualizar tablero</button>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="hint">
+        Se procesa <b>en tu navegador</b> (nada se sube a ningún servidor). Acepta el formato normal y el
+        doble-entrecomillado. Deja las fechas vacías para incluir todo el archivo. Usa «Actualizar tablero» solo para aplicar un rango de fechas distinto. Para volver a los datos
+        originales publicados, recarga la página.
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Fuente: bitácora operativa CBMEL (registros de despacho con coordenadas GPS y estados 6-x). Cada punto corresponde a un despacho creado en el sistema.
+    El tiempo de respuesta es el primer arribo al lugar (estado 6-3) desde la creación del despacho. Las categorías y subcategorías corresponden a las claves radiales oficiales CBMEL actualizadas en 2022.
+    <br>Panel estático — funciona en GitHub Pages sin backend. Generado con Leaflet + Chart.js.
+  </div>
+</div>
+
+<script>
+/* ================= DATOS INICIALES ================= */
+const INITIAL = {"agg":{"total":62,"con_coord":62,"veh_total":65,"resp_med":10.0,"resp_mean":12.6,"resp_p90":26.6,"resp_max":36.5,"resp_sd":8.5,"pct_target":31,"target":8.0,"fecha_ini":"16-07-2026","fecha_fin":"17-07-2026","center":[-33.67781,-71.22669],"by_cat":[{"k":"Llamado no Clasificado","v":48,"c":"#5B6472"},{"k":"Llamado Eléctrico","v":6,"c":"#A15CE0"},{"k":"Llamado a Rescate de Emergencia","v":2,"c":"#2E7CE4"},{"k":"Llamado de pastizales y/o basura","v":2,"c":"#F5871F"},{"k":"Llamado a Rescate Vehicular","v":1,"c":"#00A6C8"},{"k":"Llamado a otros Servicios","v":1,"c":"#25B0A8"},{"k":"Llamado Estructural","v":1,"c":"#E4322B"},{"k":"Llamado a Emanación de Gases","v":1,"c":"#8E5BD9"}],"by_day":[{"d":"2026-07-16","v":10},{"d":"2026-07-17","v":52}],"by_hour":[0,1,0,0,0,1,1,2,4,6,5,6,4,2,6,3,5,5,4,1,4,0,1,1],"ctrl":[{"t":"16-07 10:53","v":8.7},{"t":"16-07 10:59","v":11.2},{"t":"16-07 11:48","v":36.5},{"t":"16-07 12:19","v":34.4},{"t":"16-07 14:24","v":11.0},{"t":"16-07 20:27","v":7.7},{"t":"16-07 22:09","v":9.9},{"t":"16-07 23:57","v":5.5},{"t":"17-07 01:36","v":32.1},{"t":"17-07 05:05","v":4.5},{"t":"17-07 06:58","v":30.6},{"t":"17-07 07:14","v":7.0},{"t":"17-07 07:35","v":4.4},{"t":"17-07 08:10","v":16.2},{"t":"17-07 08:21","v":3.3},{"t":"17-07 08:31","v":9.4},{"t":"17-07 08:49","v":10.0},{"t":"17-07 09:10","v":3.3},{"t":"17-07 09:20","v":9.1},{"t":"17-07 09:23","v":9.6},{"t":"17-07 09:45","v":5.8},{"t":"17-07 10:19","v":3.8},{"t":"17-07 10:25","v":14.0},{"t":"17-07 10:29","v":9.1},{"t":"17-07 11:02","v":4.8},{"t":"17-07 11:22","v":4.6},{"t":"17-07 11:44","v":6.5},{"t":"17-07 11:56","v":10.5},{"t":"17-07 12:40","v":7.5},{"t":"17-07 12:58","v":10.0},{"t":"17-07 13:10","v":13.0},{"t":"17-07 13:50","v":15.5},{"t":"17-07 14:25","v":11.4},{"t":"17-07 14:31","v":21.9},{"t":"17-07 14:40","v":3.3},{"t":"17-07 14:53","v":11.8},{"t":"17-07 15:09","v":9.5},{"t":"17-07 15:31","v":10.7},{"t":"17-07 15:56","v":30.5},{"t":"17-07 16:14","v":12.9},{"t":"17-07 16:21","v":6.0},{"t":"17-07 16:29","v":7.4},{"t":"17-07 16:49","v":8.7},{"t":"17-07 17:01","v":19.9},{"t":"17-07 17:13","v":23.7},{"t":"17-07 17:33","v":24.0},{"t":"17-07 17:53","v":11.5},{"t":"17-07 17:59","v":28.3},{"t":"17-07 18:26","v":9.7},{"t":"17-07 18:34","v":17.0},{"t":"17-07 18:48","v":16.5},{"t":"17-07 18:59","v":11.0},{"t":"17-07 19:35","v":10.3},{"t":"17-07 20:03","v":14.3},{"t":"17-07 20:29","v":3.8}],"ctrl_mu":12.6,"ctrl_ucl":38.0,"ctrl_lcl":0},"incidents":[{"hora":"2026-07-16 09:51","fecha":"2026-07-16","hh":9,"dia":"Thursday","clave":"10-4-1","categoria":"Llamado a Rescate Vehicular","subcategoria":"Colisión, volcamiento o choque: hasta 3 lesionados o un atrapado","color":"#00A6C8","sector":"RUTA G-380","desc":"RUTA G-380, KM 22 (INICIO CUESTA MALLARAUCO)","lat":-33.589036,"lon":-70.98366,"n_veh":2,"veh":"R-5, B-3","resp_min":null,"narrativa":"SE RECORRE EL SECTOR NO ENCONTRANDO NADA 6-16"},{"hora":"2026-07-16 10:53","fecha":"2026-07-16","hh":10,"dia":"Thursday","clave":"10-9","categoria":"Llamado a otros Servicios","subcategoria":"Llamado a otros Servicios","color":"#25B0A8","sector":"MERCED / ORTUZAR","desc":"MERCED / ORTUZAR","lat":-33.685046,"lon":-71.215329,"n_veh":1,"veh":"M-2","resp_min":8.7,"narrativa":"Se cambia posición en el mapa. [-71.2152578, -33.684932199635] => [-71.215328790255, -33.685045712471]"},{"hora":"2026-07-16 10:59","fecha":"2026-07-16","hh":10,"dia":"Thursday","clave":"10-2-1","categoria":"Llamado de pastizales y/o basura","subcategoria":"Fuego en pastizales o árboles de pequeña o mediana magnitud","color":"#F5871F","sector":"SECTOR ULMEN","desc":"SECTOR ULMEN, LOS MAITENES","lat":-33.842562,"lon":-71.369253,"n_veh":1,"veh":"BF-6","resp_min":11.2,"narrativa":"CAIDA DE ARBOL SOBRE TENDIDO ELECTRICO CONTROLA POR PROPIETARIOS"},{"hora":"2026-07-16 11:48","fecha":"2026-07-16","hh":11,"dia":"Thursday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"SECTOR LAS ACACIAS","desc":"SECTOR LAS ACACIAS, CODIGUA (CALLEJON LAS AVESTRUCES)","lat":-33.756387,"lon":-71.320757,"n_veh":1,"veh":"B-7","resp_min":36.5,"narrativa":"Se cambia posición en el mapa. [-71.319297950486, -33.759446466323] => [-71.320757089326, -33.75638666091]"},{"hora":"2026-07-16 12:19","fecha":"2026-07-16","hh":12,"dia":"Thursday","clave":"10-2-1","categoria":"Llamado de pastizales y/o basura","subcategoria":"Fuego en pastizales o árboles de pequeña o mediana magnitud","color":"#F5871F","sector":"PARCELEROS SECTOR 5 DE POPETA / RUTA G-660 (SECTOR 4 POPETA ","desc":"PARCELEROS SECTOR 5 DE POPETA / RUTA G-660 (SECTOR 4 POPETA HACIA EL ESTERO)","lat":-33.840187,"lon":-71.27703,"n_veh":1,"veh":"BF-6","resp_min":34.4,"narrativa":"PEQUEÑA QUEMA DE EUCALIPTO A ORILLA DE ESRTERO SIN PROPAGACION, NO SE TRABAJA SIN ACCESO A LA MAQUINA"},{"hora":"2026-07-16 14:24","fecha":"2026-07-16","hh":14,"dia":"Thursday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"RUTA G-74-F / SARGENTO CANDELARIA","desc":"RUTA G-74-F / SARGENTO CANDELARIA","lat":-33.585604,"lon":-71.220394,"n_veh":1,"veh":"BF-5","resp_min":11.0,"narrativa":"CAIDA DE ARBOL APROX 7 MTRS DE ALTURA, SIN PELIGRO NI DAÑOS A ESTRUCTURA SE TRABAJA"},{"hora":"2026-07-16 16:47","fecha":"2026-07-16","hh":16,"dia":"Thursday","clave":"10-7","categoria":"Llamado Eléctrico","subcategoria":"Llamado Eléctrico","color":"#A15CE0","sector":"Las Camelias 1032","desc":"Las Camelias 1032, Melipilla, Región Metropolitana, Chile / LOS AROMOS","lat":-33.699229,"lon":-71.220942,"n_veh":1,"veh":"BX-7","resp_min":null,"narrativa":"DESPRENDIMIENTO DE HUMO DESDE MEDIDOR ELECTRICO"},{"hora":"2026-07-16 20:27","fecha":"2026-07-16","hh":20,"dia":"Thursday","clave":"10-7","categoria":"Llamado Eléctrico","subcategoria":"Llamado Eléctrico","color":"#A15CE0","sector":"POBLACION EMOS (CAMELIAS 1032)","desc":"POBLACION EMOS (CAMELIAS 1032)","lat":-33.700223,"lon":-71.220982,"n_veh":1,"veh":"BX-7","resp_min":7.7,"narrativa":"DESPERFECTO EN MEDIDOR DE ELECTRICIDAD"},{"hora":"2026-07-16 22:09","fecha":"2026-07-16","hh":22,"dia":"Thursday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"RUTA G-60","desc":"RUTA G-60, KM 25 (ALTOS DE POPETA) (PARCELA 23)","lat":-33.822764,"lon":-71.331277,"n_veh":1,"veh":"B-6","resp_min":9.9,"narrativa":"ANEGAMIENTO DE CASA HABITACION  POR SANJA SE TRABAJA CON HERRAMIENTAS PARA DESVIAR EL FLUJO"},{"hora":"2026-07-16 23:57","fecha":"2026-07-16","hh":23,"dia":"Thursday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"TACNA / ARICA (TACNA 1467 FRENTE A FUNDACION LAS ROSAS)","desc":"TACNA / ARICA (TACNA 1467 FRENTE A FUNDACION LAS ROSAS)","lat":-33.695135,"lon":-71.225225,"n_veh":1,"veh":"BX-7","resp_min":5.5,"narrativa":"FILTRACION DE AGUAS LLUVIAS AL INTERIOR DE DOMICILIO NO SE TRABAJA"},{"hora":"2026-07-17 01:36","fecha":"2026-07-17","hh":1,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION SANTA CLARA","desc":"POBLACION SANTA CLARA, MALLARAUCO","lat":-33.586323,"lon":-71.082662,"n_veh":1,"veh":"BF-5","resp_min":32.1,"narrativa":"EUCALIPTUS QUE CAE SOBRE TENDIDO DE MEDIANA TENSION PROVOCANDO EL CIERRE DEL PASO A 10 VIVIENDAS LAS CUALES SE ENCUENTRAN EN ESTE MOMENTO AISLADAS SE TRABAJA"},{"hora":"2026-07-17 05:05","fecha":"2026-07-17","hh":5,"dia":"Friday","clave":"10-0-1","categoria":"Llamado Estructural","subcategoria":"Estructura de menos de 2 pisos","color":"#E4322B","sector":"LOS ESPINOS / VICUNA MACKENNA","desc":"LOS ESPINOS / VICUNA MACKENNA","lat":-33.679205,"lon":-71.226353,"n_veh":3,"veh":"Q-2, B-3, BF-1","resp_min":4.5,"narrativa":"DESPERFECTO EN ENCHUFE"},{"hora":"2026-07-17 06:58","fecha":"2026-07-17","hh":6,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION PUANGUE","desc":"POBLACION PUANGUE, PUANGUE (PARCELA 9)","lat":-33.665589,"lon":-71.311802,"n_veh":1,"veh":"BF-1","resp_min":30.6,"narrativa":"INUNDACION DE VIVIENDA SE TRABAJA"},{"hora":"2026-07-17 07:14","fecha":"2026-07-17","hh":7,"dia":"Friday","clave":"10-7","categoria":"Llamado Eléctrico","subcategoria":"Llamado Eléctrico","color":"#A15CE0","sector":"VII DE LINEA / LA CONCEPCION (POBLACION DOCTOR FERNANDEZ)","desc":"VII DE LINEA / LA CONCEPCION (POBLACION DOCTOR FERNANDEZ)","lat":-33.696768,"lon":-71.224695,"n_veh":1,"veh":"BX-7","resp_min":7.0,"narrativa":"DESPERFECTO EN CABLE QUE BAJA HACIA MEDIDOR DE CASA HABITACION"},{"hora":"2026-07-17 07:35","fecha":"2026-07-17","hh":7,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"JOSE MANUEL BENITEZ / POLITOF","desc":"JOSE MANUEL BENITEZ / POLITOF","lat":-33.695962,"lon":-71.216826,"n_veh":1,"veh":"BX-7","resp_min":4.4,"narrativa":"INUNDACION DE CASA HABITACION , SE TRABAJA"},{"hora":"2026-07-17 08:10","fecha":"2026-07-17","hh":8,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"SAN RAFAEL DE CODIGUA","desc":"SAN RAFAEL DE CODIGUA, CODIGUA (PARROQUIA SAN RAFAEL)","lat":-33.759787,"lon":-71.294551,"n_veh":1,"veh":"B-7","resp_min":16.2,"narrativa":"INUNDACION EN CASA HABITACION SE TRABAJA CON HERRAMIENTAS MANUELES PARA CANALIZAR"},{"hora":"2026-07-17 08:21","fecha":"2026-07-17","hh":8,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"SECTOR EL TRANQUE HUECHUN BAJO","desc":"SECTOR EL TRANQUE HUECHUN BAJO","lat":-33.709921,"lon":-71.303864,"n_veh":1,"veh":"BX-7","resp_min":3.3,"narrativa":"INUNDACION DE CASA HABITACION POR CAIDA DE AGUA DESDE CERRO"},{"hora":"2026-07-17 08:31","fecha":"2026-07-17","hh":8,"dia":"Friday","clave":"10-7","categoria":"Llamado Eléctrico","subcategoria":"Llamado Eléctrico","color":"#A15CE0","sector":"COLEGIO CRISTOBAL COLON","desc":"COLEGIO CRISTOBAL COLON","lat":-33.670593,"lon":-71.216306,"n_veh":1,"veh":"B-3","resp_min":9.4,"narrativa":"ROTURA DE CABLE DE MEDIANA TENSION"},{"hora":"2026-07-17 08:49","fecha":"2026-07-17","hh":8,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"PLANTA DE REVISION TECNICA","desc":"PLANTA DE REVISION TECNICA","lat":-33.66698,"lon":-71.246929,"n_veh":1,"veh":"BF-1","resp_min":10.0,"narrativa":"CASA HABITACION INUNDADA, SE EVALUA TRABAJO DE BOMBEROS"},{"hora":"2026-07-17 09:10","fecha":"2026-07-17","hh":9,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"SECTOR EL TRANQUE HUECHUN BAJO","desc":"SECTOR EL TRANQUE HUECHUN BAJO","lat":-33.709921,"lon":-71.303864,"n_veh":1,"veh":"BX-7","resp_min":3.3,"narrativa":""},{"hora":"2026-07-17 09:20","fecha":"2026-07-17","hh":9,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION PUANGUE","desc":"POBLACION PUANGUE, PUANGUE","lat":-33.660831,"lon":-71.336514,"n_veh":1,"veh":"BF-1","resp_min":9.1,"narrativa":"INUNDACION DE VIVIENDA POR DE DESBORDE DE ACEQUIA CON ADULTO MAYOR EN SU INTERIOR, SE TRABAJA"},{"hora":"2026-07-17 09:23","fecha":"2026-07-17","hh":9,"dia":"Friday","clave":"10-7","categoria":"Llamado Eléctrico","subcategoria":"Llamado Eléctrico","color":"#A15CE0","sector":"POBLACION DOCTOR FERNANDEZ","desc":"POBLACION DOCTOR FERNANDEZ","lat":-33.695813,"lon":-71.224262,"n_veh":1,"veh":"Q-2","resp_min":9.6,"narrativa":"DESPERFECTO EN ACOMETIDA DE DOMICILIO"},{"hora":"2026-07-17 09:25","fecha":"2026-07-17","hh":9,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"COLEGIO SAN JOSE DE MELIPILLA","desc":"COLEGIO SAN JOSE DE MELIPILLA","lat":-33.68706,"lon":-71.217619,"n_veh":1,"veh":"BF-5","resp_min":null,"narrativa":"EL MOLINO SAN JOSE, SAN JOSE , MELIPILLA."},{"hora":"2026-07-17 09:45","fecha":"2026-07-17","hh":9,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION HUECHUN BAJO","desc":"POBLACION HUECHUN BAJO","lat":-33.713634,"lon":-71.287012,"n_veh":1,"veh":"BX-7","resp_min":5.8,"narrativa":"DESBORDE DE CANAL, SE CAMBIA CLAVE A 10-16 POR AFECTACION A 10 CASA EN POBLACION HUECHUN"},{"hora":"2026-07-17 10:19","fecha":"2026-07-17","hh":10,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"VICUNA MACKENNA / AVENIDA TRES PONIENTE","desc":"VICUNA MACKENNA / AVENIDA TRES PONIENTE","lat":-33.675868,"lon":-71.233955,"n_veh":1,"veh":"BF-3","resp_min":3.8,"narrativa":"DESBORDE DE CANAL POR COSTADO DE VC MACKENNA SE TRABAJA EN CONJUNTO CON PERSONAL DE SEG PUBLICA Y MUNICIPAL"},{"hora":"2026-07-17 10:25","fecha":"2026-07-17","hh":10,"dia":"Friday","clave":"10-6-1","categoria":"Llamado a Emanación de Gases","subcategoria":"Emanación de gases desconocidos o GLP en estructuras","color":"#8E5BD9","sector":"VILLA RAFAEL SOTOMAYOR","desc":"VILLA RAFAEL SOTOMAYOR","lat":-33.686263,"lon":-71.207626,"n_veh":1,"veh":"BX-4","resp_min":14.0,"narrativa":"INFLAMACION DE CALEFONT, SE TRABAJA"},{"hora":"2026-07-17 10:29","fecha":"2026-07-17","hh":10,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION PUANGUE","desc":"POBLACION PUANGUE, PUANGUE","lat":-33.665589,"lon":-71.311802,"n_veh":1,"veh":"BF-1","resp_min":9.1,"narrativa":"DESBORDE DE CANAL SE EVALUA TRABAJO"},{"hora":"2026-07-17 11:02","fecha":"2026-07-17","hh":11,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"RETEN CODIGUA (CARABINEROS DE CHILE)","desc":"RETEN CODIGUA (CARABINEROS DE CHILE)","lat":-33.757331,"lon":-71.324128,"n_veh":1,"veh":"B-7","resp_min":4.8,"narrativa":"ENTRADA DE AGUA A DOMICILIO POR TECHUMBRE SE TRABAJA"},{"hora":"2026-07-17 11:19","fecha":"2026-07-17","hh":11,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION PUANGUE","desc":"POBLACION PUANGUE, PUANGUE","lat":-33.665589,"lon":-71.311802,"n_veh":1,"veh":"BF-1","resp_min":null,"narrativa":""},{"hora":"2026-07-17 11:22","fecha":"2026-07-17","hh":11,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"LAGO PUYEHUE / LOS ESPINOS","desc":"LAGO PUYEHUE / LOS ESPINOS","lat":-33.686402,"lon":-71.227029,"n_veh":1,"veh":"BF-3","resp_min":4.6,"narrativa":"INUNDACION DE VIVIENDA APROXIMADAMENTE 3 CUADRAS"},{"hora":"2026-07-17 11:44","fecha":"2026-07-17","hh":11,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"Los Bollenes 2 (LAS NALCAS 878)","desc":"Los Bollenes 2 (LAS NALCAS 878)","lat":-33.573264,"lon":-71.198588,"n_veh":1,"veh":"BF-5","resp_min":6.5,"narrativa":"Datos Contacto: Nombre llamada = IVAN"},{"hora":"2026-07-17 11:56","fecha":"2026-07-17","hh":11,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"PARADERO 8","desc":"PARADERO 8, BOLLENAR (LAS PARCELAS 943)","lat":-33.571189,"lon":-71.19087,"n_veh":1,"veh":"BF-5","resp_min":10.5,"narrativa":"ANEGAMIENTO DE VIVIENDA Y PATIO DE CASA HABITACION"},{"hora":"2026-07-17 12:04","fecha":"2026-07-17","hh":12,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION PUANGUE","desc":"POBLACION PUANGUE, PUANGUE","lat":-33.665589,"lon":-71.311802,"n_veh":1,"veh":"BF-1","resp_min":null,"narrativa":""},{"hora":"2026-07-17 12:40","fecha":"2026-07-17","hh":12,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"EL ESFUERZO","desc":"EL ESFUERZO, CODIGUA","lat":-33.760777,"lon":-71.316604,"n_veh":1,"veh":"B-7","resp_min":7.5,"narrativa":"ANEGAMOENTO DE VIVIENDA PRODUCTO DE CRECIDA DE CANALES, SIN EVACUACION DE AGUA"},{"hora":"2026-07-17 12:58","fecha":"2026-07-17","hh":12,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"VICUNA MACKENNA / ORTUZAR","desc":"VICUNA MACKENNA / ORTUZAR","lat":-33.68024,"lon":-71.21495,"n_veh":1,"veh":"BF-3","resp_min":10.0,"narrativa":"INUNDACION DE PATIO EN CASA HABITACION SE TRABAJA"},{"hora":"2026-07-17 13:10","fecha":"2026-07-17","hh":13,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"ELEUTERIO RAMIREZ / CAPITAN TRIZANO","desc":"ELEUTERIO RAMIREZ / CAPITAN TRIZANO","lat":-33.682907,"lon":-71.202239,"n_veh":1,"veh":"BF-1","resp_min":13.0,"narrativa":"ANEGAMINETO DE AVENIDA PRINCIPAL CON RIESGO DE 8 VIVIENDAS, SE TRABAJA EN CONUNTO CON PERSONAL MUNICIPIPAL"},{"hora":"2026-07-17 13:50","fecha":"2026-07-17","hh":13,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"RUTA G-380","desc":"RUTA G-380, KM 0 (POSTA BOLLENAR) (VILLA LAS CAMELIAS CASA 15)","lat":-33.568983,"lon":-71.211005,"n_veh":1,"veh":"BF-5","resp_min":15.5,"narrativa":"ANEGAMIENTO DE PASAJE PROXIMO A INGRESAR A DOMICILIOS"},{"hora":"2026-07-17 14:25","fecha":"2026-07-17","hh":14,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"SECTOR MANDINGA (POBLACION MANDINGA)","desc":"SECTOR MANDINGA (POBLACION MANDINGA)","lat":-33.797565,"lon":-71.299926,"n_veh":1,"veh":"BF-6","resp_min":11.4,"narrativa":"INUNDACION DE CASA HABITACION CON DOS ADULTOS MAYORES EN SU INTERIOR SE TRABAJA OCN MOTOBOMBA"},{"hora":"2026-07-17 14:28","fecha":"2026-07-17","hh":14,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"SAN MIGUEL / PARDO (SAN MIGUEL)","desc":"SAN MIGUEL / PARDO (SAN MIGUEL)","lat":-33.689337,"lon":-71.218231,"n_veh":1,"veh":"BX-7","resp_min":null,"narrativa":"ALCANTARILLADO AL INTERIOR DE CASA HABITACION"},{"hora":"2026-07-17 14:31","fecha":"2026-07-17","hh":14,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION PUANGUE","desc":"POBLACION PUANGUE, PUANGUE","lat":-33.665589,"lon":-71.311802,"n_veh":1,"veh":"BF-3","resp_min":21.9,"narrativa":"INUNDAICON DE DOS CASAS HABITACION, SE TRABAJA"},{"hora":"2026-07-17 14:40","fecha":"2026-07-17","hh":14,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"PARADERO 6","desc":"PARADERO 6, BOLLENAR","lat":-33.570821,"lon":-71.201939,"n_veh":1,"veh":"B-5","resp_min":3.3,"narrativa":"CAIDA DE ARBOL SOBRE CASA HABITACION, SE TRABAJA"},{"hora":"2026-07-17 14:53","fecha":"2026-07-17","hh":14,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"JUAN BAUTISTA PASTENE / JUAN WILLIAMS REBOLLEDO (POBLACION C","desc":"JUAN BAUTISTA PASTENE / JUAN WILLIAMS REBOLLEDO (POBLACION CAMPO LINDO)","lat":-33.676431,"lon":-71.213273,"n_veh":1,"veh":"BF-1","resp_min":11.8,"narrativa":"INUNDACION DE APROX 10 VIVIENDAS POR DESBORDE DE CANAL 1-3"},{"hora":"2026-07-17 15:09","fecha":"2026-07-17","hh":15,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"VILLA SAN AGUSTIN","desc":"VILLA SAN AGUSTIN","lat":-33.687062,"lon":-71.207477,"n_veh":1,"veh":"BX-7","resp_min":9.5,"narrativa":"Se cambia posición en el mapa. [-71.207234, -33.686834] => [-71.20747737892, -33.687062381708]"},{"hora":"2026-07-17 15:31","fecha":"2026-07-17","hh":15,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"PLANTA DE REVISION TECNICA","desc":"PLANTA DE REVISION TECNICA","lat":-33.668566,"lon":-71.245232,"n_veh":1,"veh":"BX-7","resp_min":10.7,"narrativa":"INUNDACION EN PATIO DE CASA HABITACION CON INGRESO A COCINA PORTERIOR PIEZA, SE TRABAJA"},{"hora":"2026-07-17 15:56","fecha":"2026-07-17","hh":15,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"CALLEJON SANTA FILOMENA","desc":"CALLEJON SANTA FILOMENA, BOLLENAR","lat":-33.58734,"lon":-71.231366,"n_veh":1,"veh":"BF-5","resp_min":30.5,"narrativa":"Se cambia posición en el mapa. [-71.235006630388, -33.586803577852] => [-71.231366425668, -33.587340122031]"},{"hora":"2026-07-17 16:14","fecha":"2026-07-17","hh":16,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"Pje. Río Limarí","desc":"Pje. Río Limarí, Melipilla, Región Metropolitana, Chile / PORTAL ORIENTE  II","lat":-33.676388,"lon":-71.184394,"n_veh":1,"veh":"BX-4","resp_min":12.9,"narrativa":"ACUMULACION DE AGUA LLUVIA EN PATIO DE CASA HABITACION CON AFECTACION A INTERIOR DE VIVIENDA, SE TRABAJA"},{"hora":"2026-07-17 16:21","fecha":"2026-07-17","hh":16,"dia":"Friday","clave":"10-3-7","categoria":"Llamado a Rescate de Emergencia","subcategoria":"Rescate por posible PCR","color":"#2E7CE4","sector":"EL HUERTO / SAN MIGUEL","desc":"EL HUERTO / SAN MIGUEL","lat":-33.689233,"lon":-71.203061,"n_veh":1,"veh":"RX-1","resp_min":6.0,"narrativa":"MASCULINO DE 80 AÑOS EN PCR"},{"hora":"2026-07-17 16:29","fecha":"2026-07-17","hh":16,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"PASAJE LAS PERDICES","desc":"PASAJE LAS PERDICES, SAN JOSE","lat":-33.609547,"lon":-71.222603,"n_veh":1,"veh":"BF-5","resp_min":7.4,"narrativa":"5 VIVIENDAS AFECTADAS 1 DE ELLA INGRESO EL AGUA , SERIA NEGATIVO EL TRABAJO YA QUEW NO HAY MANERA DE ENCAUSAR LAS AGUAS."},{"hora":"2026-07-17 16:49","fecha":"2026-07-17","hh":16,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"PARADERO 9","desc":"PARADERO 9, BOLLENAR","lat":-33.57158,"lon":-71.18646,"n_veh":1,"veh":"B-5","resp_min":8.7,"narrativa":"CAIDA DE ARBOL SOBRE DOMICILIO, SE TRABAJA"},{"hora":"2026-07-17 17:01","fecha":"2026-07-17","hh":17,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"COLEGIO MENESIANO","desc":"COLEGIO MENESIANO","lat":-33.792481,"lon":-71.246386,"n_veh":1,"veh":"BF-6","resp_min":19.9,"narrativa":"INUNDACION DE PATIO EN CASA HABITACION CON PELIGRO DE INGRESO A VIVIENDA, SE TRABAJA CON MOTOBOMBA"},{"hora":"2026-07-17 17:13","fecha":"2026-07-17","hh":17,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION PUANGUE","desc":"POBLACION PUANGUE, PUANGUE","lat":-33.665589,"lon":-71.311802,"n_veh":1,"veh":"BF-3","resp_min":23.7,"narrativa":"INUNDACION DE CASA HABITACION SE TRABAJA"},{"hora":"2026-07-17 17:33","fecha":"2026-07-17","hh":17,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"CAMINO SANTA ROSA DE ESMERALDA","desc":"CAMINO SANTA ROSA DE ESMERALDA","lat":-33.644334,"lon":-71.276927,"n_veh":1,"veh":"BF-1","resp_min":24.0,"narrativa":"ANEGAMIENTO DE PATIO, SE TRABAJA EN EVACUACION CON ACEQUIA Y MOTOBOMBA"},{"hora":"2026-07-17 17:53","fecha":"2026-07-17","hh":17,"dia":"Friday","clave":"10-3-6","categoria":"Llamado a Rescate de Emergencia","subcategoria":"Rescate en lechos de ríos, canales, zanjas o alturas","color":"#2E7CE4","sector":"SECTOR RUMAY","desc":"SECTOR RUMAY","lat":-33.630179,"lon":-71.235682,"n_veh":1,"veh":"Q-2","resp_min":11.5,"narrativa":""},{"hora":"2026-07-17 17:59","fecha":"2026-07-17","hh":17,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"PUENTE SANTA TERESA","desc":"PUENTE SANTA TERESA, MALLARAUCO (CALLEJON PATRIA VIEJA)","lat":-33.579759,"lon":-71.014212,"n_veh":1,"veh":"BF-5","resp_min":28.3,"narrativa":"DESBORDE DE CANAL NO AFECTANDO  ANEGAMIENTO DE  VIVIENDAS , NO SE TRABAJA"},{"hora":"2026-07-17 18:26","fecha":"2026-07-17","hh":18,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION OBISPO PABLO LIZAMA","desc":"POBLACION OBISPO PABLO LIZAMA","lat":-33.679188,"lon":-71.230982,"n_veh":1,"veh":"BF-3","resp_min":9.7,"narrativa":"EVACUACION DE PERSONAS DESDE DOMICILIOS"},{"hora":"2026-07-17 18:34","fecha":"2026-07-17","hh":18,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"ANSELMO ALARCON / ARTURO PRAT (BOLLENAR)","desc":"ANSELMO ALARCON / ARTURO PRAT (BOLLENAR)","lat":-33.568939,"lon":-71.210141,"n_veh":1,"veh":"B-5","resp_min":17.0,"narrativa":"DESBORDE DE CANAL NO AFECTANDO  ANEGAMIENTO DE  VIVIENDAS , NO SE TRABAJA"},{"hora":"2026-07-17 18:48","fecha":"2026-07-17","hh":18,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"CALLEJON SANTA FILOMENA","desc":"CALLEJON SANTA FILOMENA, BOLLENAR","lat":-33.586804,"lon":-71.235007,"n_veh":1,"veh":"Q-2","resp_min":16.5,"narrativa":"CAIDA DE ARBOL DE 15 METROS DE ALTURA SOBRE CASA"},{"hora":"2026-07-17 18:59","fecha":"2026-07-17","hh":18,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION EL PIMIENTO","desc":"POBLACION EL PIMIENTO, MALLARAUCO (POBLACION JUAN MUSRRI)","lat":-33.573849,"lon":-70.980909,"n_veh":1,"veh":"BF-5","resp_min":11.0,"narrativa":"A CARGO 502 NICOLAS CACERES SE TRATO DE ANEGAMIENTO DE VIVIENDA CONTROLADO POR MORADORES"},{"hora":"2026-07-17 19:35","fecha":"2026-07-17","hh":19,"dia":"Friday","clave":"10-7","categoria":"Llamado Eléctrico","subcategoria":"Llamado Eléctrico","color":"#A15CE0","sector":"LAS PRADERAS DE CODIGUA","desc":"LAS PRADERAS DE CODIGUA, CODIGUA","lat":-33.763968,"lon":-71.297047,"n_veh":1,"veh":"B-7","resp_min":10.3,"narrativa":"DESPERFECTO DE ACOMETIDA DE CASA HABITACION"},{"hora":"2026-07-17 20:03","fecha":"2026-07-17","hh":20,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION SANTA CLARA","desc":"POBLACION SANTA CLARA, MALLARAUCO (AL INTERIOR)","lat":-33.577168,"lon":-71.084147,"n_veh":1,"veh":"BF-5","resp_min":14.3,"narrativa":"CRECIDA DE CANAL CON POSIBLE DESBORDE A VIVIENDA, EN SU INTERIOR 4 PERSONAS , SE EVALUA EVACUACION DE LAS PERSONAS (2 ADULTOS Y 2 MENORES)"},{"hora":"2026-07-17 20:29","fecha":"2026-07-17","hh":20,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"EL ESFUERZO","desc":"EL ESFUERZO, CODIGUA","lat":-33.760777,"lon":-71.316604,"n_veh":1,"veh":"B-7","resp_min":3.8,"narrativa":"CAIDA DE ARBOL EN CAMINO"},{"hora":"2026-07-17 20:39","fecha":"2026-07-17","hh":20,"dia":"Friday","clave":"10-8","categoria":"Llamado no Clasificado","subcategoria":"Llamado no Clasificado","color":"#5B6472","sector":"POBLACION PUANGUE","desc":"POBLACION PUANGUE, PUANGUE","lat":-33.665589,"lon":-71.311802,"n_veh":1,"veh":"BF-3","resp_min":null,"narrativa":""}]};
+
+/* ================= CLASIFICACIÓN OFICIAL CBMEL 2022 ================= */
+const FAMILIA = {
+  "10-0": "Llamado Estructural",
+  "10-1": "Llamado de vehículos",
+  "10-2": "Llamado de pastizales y/o basura",
+  "10-3": "Llamado a Rescate de Emergencia",
+  "10-4": "Llamado a Rescate Vehicular",
+  "10-5": "Llamado Haz-Mat",
+  "10-6": "Llamado a Emanación de Gases",
+  "10-7": "Llamado Eléctrico",
+  "10-8": "Llamado no Clasificado",
+  "10-9": "Llamado a otros Servicios",
+  "10-10": "Llamado a Escombros",
+  "10-11": "Llamado a Servicio Aéreo",
+  "10-12": "Llamado de Apoyo a otros Cuerpos",
+  "10-13": "Llamado a Atentados Terroristas",
+  "10-14": "Llamado a Accidentes Aéreos y/o Emergencia aeronáutica",
+  "10-15": "Llamado a Simulacro",
+  "10-16": "Llamado a emergencias por desastres naturales"
+};
+const CLAVE_DESC = {
+  "10-0": "Llamado Estructural",
+  "10-0-1": "Estructura de menos de 2 pisos",
+  "10-0-2": "Estructura de sobre 3 pisos",
+  "10-0-3": "Estructura con alta afluencia de personas",
+  "10-0-4": "Estructura de material ligero",
+  "10-0-5": "Estructura con presencia de Materiales Peligrosos",
+  "10-1": "Llamado de vehículos",
+  "10-1-1": "Fuego en vehículos livianos (autos, camionetas, motos)",
+  "10-1-2": "Fuego en vehículos pesados (camiones, buses, microbuses, maquinaria agrícola o especial)",
+  "10-2": "Llamado de pastizales y/o basura",
+  "10-2-1": "Fuego en pastizales o árboles de pequeña o mediana magnitud",
+  "10-2-2": "Llamado Forestal (interfase)",
+  "10-2-3": "Llamado Forestal (no interfase)",
+  "10-2-4": "Llamado Forestal (PAP, PAS, Prevención)",
+  "10-2-5": "Fuego en vertederos y/o basurales y grandes contenedores de basura",
+  "10-2-6": "Fuego en pequeños contenedores o basura en poca cantidad",
+  "10-2-7": "Fuego en objetos combustibles producto de barricadas o similares",
+  "10-3": "Llamado a Rescate de Emergencia",
+  "10-3-1": "Caídas (a nivel, de altura u otros traumatismos)",
+  "10-3-2": "Atropellos",
+  "10-3-3": "Atrapamiento de extremidad o empalamiento",
+  "10-3-4": "Personas encerradas (ascensores, domicilios, etc.)",
+  "10-3-5": "Personas atrapadas en estructuras colapsadas",
+  "10-3-6": "Rescate en lechos de ríos, canales, zanjas o alturas",
+  "10-3-7": "Rescate por posible PCR",
+  "10-3-8": "Rescate en espacios confinados",
+  "10-3-9": "Rescate de personas en áreas agrestes",
+  "10-3-10": "Rescate de animales atrapados o con riesgo de caída",
+  "10-3-11": "Recuperación de fallecido posterior a accidente de tránsito, cursos de agua u otros",
+  "10-4": "Llamado a Rescate Vehicular",
+  "10-4-1": "Colisión, volcamiento o choque: hasta 3 lesionados o un atrapado",
+  "10-4-2": "Colisión, volcamiento o choque: desde 4 lesionados y/o más de dos atrapados",
+  "10-4-3": "Accidente de vehículo pesado con lesionados y/o atrapados",
+  "10-4-4": "Accidente de vehículo con materiales peligrosos",
+  "10-4-5": "Desbarrancamiento de vehículo",
+  "10-4-6": "Colisión de tren con vehículo sin materiales peligrosos",
+  "10-4-7": "Colisión de tren con vehículo con materiales peligrosos",
+  "10-5": "Llamado Haz-Mat",
+  "10-5-1": "Derrame menor de combustible, productos químicos o desconocidos en vía pública",
+  "10-5-2": "Derrame mayor de combustible, productos químicos o desconocidos en vía pública",
+  "10-5-3": "Emergencia HAZMAT en estructuras",
+  "10-5-4": "Emergencia con cianuro, mercurio, desechos biológicos o radioactivos, o virus peligrosos",
+  "10-5-5": "Descarrilamiento de tren con fuga de ácido sulfúrico u otros químicos",
+  "10-6": "Llamado a Emanación de Gases",
+  "10-6-1": "Emanación de gases desconocidos o GLP en estructuras",
+  "10-6-2": "Emanación de gases desconocidos o GLP en vía pública",
+  "10-6-3": "Explosión de cilindros o contenedores de gases",
+  "10-7": "Llamado Eléctrico",
+  "10-8": "Llamado no Clasificado",
+  "10-9": "Llamado a otros Servicios",
+  "10-10": "Llamado a Escombros",
+  "10-10-1": "Remoción de escombros o rebrote en un estructural",
+  "10-10-2": "Remoción de escombros o rebrote en un forestal",
+  "10-11": "Llamado a Servicio Aéreo",
+  "10-11-1": "Abastecimiento de aeronaves por incendio forestal",
+  "10-11-2": "Guardia preventiva en aeródromo",
+  "10-12": "Llamado de Apoyo a otros Cuerpos",
+  "10-13": "Llamado a Atentados Terroristas",
+  "10-14": "Llamado a Accidentes Aéreos y/o Emergencia aeronáutica",
+  "10-15": "Llamado a Simulacro",
+  "10-16": "Llamado a emergencias por desastres naturales"
+};
+const COLOR = {
+  "Llamado Estructural": "#E4322B",
+  "Llamado de vehículos": "#F4511E",
+  "Llamado de pastizales y/o basura": "#F5871F",
+  "Llamado a Rescate de Emergencia": "#2E7CE4",
+  "Llamado a Rescate Vehicular": "#00A6C8",
+  "Llamado Haz-Mat": "#C6D400",
+  "Llamado a Emanación de Gases": "#8E5BD9",
+  "Llamado Eléctrico": "#A15CE0",
+  "Llamado no Clasificado": "#5B6472",
+  "Llamado a otros Servicios": "#25B0A8",
+  "Llamado a Escombros": "#D64545",
+  "Llamado a Servicio Aéreo": "#4DB6E8",
+  "Llamado de Apoyo a otros Cuerpos": "#3F51B5",
+  "Llamado a Atentados Terroristas": "#B71C1C",
+  "Llamado a Accidentes Aéreos y/o Emergencia aeronáutica": "#6A1B9A",
+  "Llamado a Simulacro": "#43A047",
+  "Llamado a emergencias por desastres naturales": "#546E7A",
+  "Sin clasificar": "#4A5160"
+};
+const TARGET = 8.0;
+function familiaClave(clave){
+  if(!clave) return '';
+  return clave.split('-').slice(0,2).join('-');
+}
+function categoria(clave){
+  if(!clave) return 'Sin clasificar';
+  const fam=familiaClave(clave);
+  return FAMILIA[fam] || ('Otra ('+clave+')');
+}
+function descripcionClave(clave){
+  return CLAVE_DESC[clave] || categoria(clave);
+}
+
+/* ================= PARSEO DE CSV ROBUSTO ================= */
+const FIELD_RE = /^([\s\S]*?),("[^"]*"|[^,]*),([^,]*),("[^"]*"|[^,]*),([^,]*),([^,]*)$/;
+function stripQ(s){ return String(s||'').replace(/^"|"$/g,'').replace(/""/g,'"').trim(); }
+function parseHora(s){
+  if(!s) return null;
+  const d=new Date(String(s).trim().replace(' ','T'));
+  return isNaN(d.getTime())?null:d;
+}
+function parseBitacora(text){
+  const parsed=Papa.parse(text,{skipEmptyLines:true});
+  const data=parsed.data||[];
+  if(!data.length) return [];
+  let header=data[0].map(x=>stripQ(x));
+  const pos={}; header.forEach((h,i)=>pos[h.trim()]=i);
+  const rows=[];
+  for(let i=1;i<data.length;i++){
+    let rec=data[i];
+    if(rec.length===1){
+      const m=FIELD_RE.exec(String(rec[0]||''));
+      if(m) rec=[m[1],stripQ(m[2]),m[3],stripQ(m[4]),m[5],m[6]];
+      else continue;
+    }
+    const get=(name,fallback)=>stripQ(rec[pos[name]!==undefined?pos[name]:fallback]??'');
+    rows.push({
+      Contenido:get('Contenido',0), Despacho:get('Despacho',1), Vehiculo:get('Vehículo',2),
+      Hora:get('Hora',3), Codigo:get('Código',4), Usuario:get('Usuario',5)
+    });
+  }
+  return rows;
+}
+function respSecs(s){
+  const m=/Tiempo en llegar\s*(?:(\d+)\s*min)?\s*(?:(\d+)\s*seg)?/i.exec(s||'');
+  if(!m) return null;
+  const v=(m[1]?+m[1]:0)*60+(m[2]?+m[2]:0);
+  return v||null;
+}
+const SYSTEM_PATTERNS=['Se crea despacho','Coordenadas: Latitud','Detalle Despacho: Clave','Se despacha Vehículo','Se cambia estado a','Se cierra el despacho','Usuario ','Vehículo ','El vehículo ','El usuario ','Ordenamiento sugerido','Se agrega','Se elimina','Modifica despacho'];
+function nearestRow(g,t0,needle){
+  const z=g.filter(r=>(r.Contenido||'').toLowerCase().includes(needle.toLowerCase())&&r._hora);
+  if(!z.length) return null;
+  z.sort((a,b)=>Math.abs(a._hora-t0)-Math.abs(b._hora-t0));
+  return z[0];
+}
+function eventNarrative(g){
+  const a=[...g].sort((x,y)=>x._hora-y._hora);
+  for(const r of a){ const m=/SE TRATA DE[:\s]*(.+)/i.exec(r.Contenido||''); if(m) return m[1].trim().slice(0,180); }
+  for(const r of a){
+    const x=String(r.Contenido||'').trim();
+    if(x.length<12) continue;
+    if(SYSTEM_PATTERNS.some(p=>x.toLowerCase().includes(p.toLowerCase()))) continue;
+    return x.slice(0,180);
+  }
+  return '';
+}
+
+/* ================= EXTRACCIÓN POR DESPACHO ================= */
+function extractIncidents(rows){
+  const rr=rows.map((r,i)=>({...r,_i:i,_hora:parseHora(r.Hora)}));
+  const by=new Map();
+  rr.forEach(r=>{ const k=(r.Despacho||'').trim(); if(!k)return; if(!by.has(k))by.set(k,[]); by.get(k).push(r); });
+  const creates=rr.filter(r=>r._hora&&(r.Contenido||'').toLowerCase().includes('se crea despacho'));
+  const incs=[];
+  for(const cr of creates){
+    const t0=cr._hora, despacho=(cr.Despacho||'').trim(), g=by.get(despacho)||[];
+    if(!g.length) continue;
+    const closes=g.filter(r=>r._hora>=t0&&(r.Contenido||'').toLowerCase().includes('se cierra el despacho')).sort((a,b)=>a._hora-b._hora);
+    const end=closes.length?closes[0]._hora:new Date(Math.max(...g.filter(r=>r._hora).map(r=>r._hora.getTime())));
+    const event=g.filter(r=>r._hora&&r._hora>=t0&&r._hora<=end);
+    const detail=nearestRow(g,t0,'Detalle Despacho: Clave');
+    const coord=nearestRow(g,t0,'Coordenadas: Latitud');
+    let clave=null,desc='';
+    if(detail){
+      const md=/Clave\s*=\s*([\s\S]*?)\s*\|\s*([\s\S]*)/i.exec(detail.Contenido||'');
+      if(md){
+        const cf=md[1].trim(); desc=md[2].trim();
+        const mn=/^(10(?:-\d+)+)\s*([\s\S]*)$/.exec(cf);
+        if(mn){ clave=mn[1]; const ex=mn[2].trim(); if(ex)desc='['+ex+'] '+desc; }
+      }
+    }
+    if(!clave){ const mm=/^\s*(10(?:-\d+)+)\s*(.*)$/.exec(despacho); if(mm){clave=mm[1];desc=desc||mm[2].trim();} }
+    if(!desc) desc=despacho.replace(/^\s*10(?:-\d+)+\s*/,'').trim();
+    if(!coord) continue;
+    const mc=/Latitud\s*(-?\d+(?:\.\d+)?),\s*Longitud\s*(-?\d+(?:\.\d+)?)/i.exec(coord.Contenido||'');
+    if(!mc) continue;
+    const lat=+mc[1],lon=+mc[2];
+    const mv=/Vehículos despachados\s*=\s*\[([^\]]*)\]/i.exec(cr.Contenido||'');
+    const vehs=mv&&mv[1].trim()?mv[1].split(',').map(v=>v.trim()).filter(Boolean):[];
+    const rts=event.map(r=>(r.Contenido||'').includes('Tiempo en llegar')?respSecs(r.Contenido):null).filter(v=>v);
+    const cat=categoria(clave);
+    incs.push({lat,lon,clave,desc,vehiculos:vehs,hora:t0,n_veh:vehs.length,resp_s:rts.length?Math.min(...rts):null,
+      narrativa:eventNarrative(event),categoria:cat,subcategoria:descripcionClave(clave),color:COLOR[cat]||'#4A5160'});
+  }
+  incs.sort((a,b)=>a.hora-b.hora);
+  return incs;
+}
+
+/* ================= HELPERS ESTADÍSTICOS ================= */
+function median(a){ return quantile(a,0.5); }
+function quantile(arr,q){
+  if(!arr.length) return NaN;
+  const a=[...arr].sort((x,y)=>x-y);
+  const pos=(a.length-1)*q, base=Math.floor(pos), rest=pos-base;
+  return a[base+1]!==undefined ? a[base]+rest*(a[base+1]-a[base]) : a[base];
+}
+function mean(a){ return a.reduce((s,x)=>s+x,0)/a.length; }
+function stdev(a){ if(a.length<2) return 0; const m=mean(a); return Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/(a.length-1)); }
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtDT(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function fmtDM(d){ return `${pad(d.getDate())}-${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function fmtDMY(d){ return `${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()}`; }
+function fechaStr(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+const DIAS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+/* ================= CONSTRUIR PAYLOAD ================= */
+function buildPayload(incs, desde, hasta){
+  let f = incs.filter(x=>x.hora);
+  if(desde) f = f.filter(x=>fechaStr(x.hora) >= desde);
+  if(hasta) f = f.filter(x=>fechaStr(x.hora) <= hasta);
+  f.forEach(x=>{ x.categoria=categoria(x.clave); x.subcategoria=descripcionClave(x.clave); x.color=COLOR[x.categoria]||'#4A5160';
+                 x.resp_min = x.resp_s==null?null:Math.round(x.resp_s/60*10)/10;
+                 x.fecha=fechaStr(x.hora); x.hh=x.hora.getHours();
+                 x.sector=(x.desc||'').split(',')[0].trim().slice(0,40); });
+
+  const recs = f.map(r=>({hora:fmtDT(r.hora), fecha:r.fecha, hh:r.hh, dia:DIAS[r.hora.getDay()],
+      clave:r.clave, categoria:r.categoria, subcategoria:r.subcategoria||descripcionClave(r.clave), color:r.color, sector:r.sector, desc:(r.desc||'').slice(0,180),
+      lat:+r.lat.toFixed(6), lon:+r.lon.toFixed(6), n_veh:r.n_veh,
+      veh:(r.vehiculos||[]).join(', '),
+      resp_min:r.resp_min, narrativa:r.narrativa||''}));
+
+  const rt = f.map(r=>r.resp_min).filter(v=>v!=null);
+  const mu = rt.length?mean(rt):0, sd = rt.length?stdev(rt):0;
+  const lats=f.map(r=>r.lat), lons=f.map(r=>r.lon);
+
+  // by_cat
+  const cc={}; f.forEach(r=>cc[r.categoria]=(cc[r.categoria]||0)+1);
+  const by_cat=Object.entries(cc).sort((a,b)=>b[1]-a[1])
+      .map(([k,v])=>({k,v,c:COLOR[k]||'#4A5160'}));
+  // by_day
+  const dd={}; f.forEach(r=>dd[r.fecha]=(dd[r.fecha]||0)+1);
+  const by_day=Object.keys(dd).sort().map(d=>({d,v:dd[d]}));
+  // by_hour
+  const bh=Array(24).fill(0); f.forEach(r=>bh[r.hh]++);
+  // control
+  const ctrlArr=f.filter(r=>r.resp_min!=null).sort((a,b)=>a.hora-b.hora);
+  const ctrl=ctrlArr.map(r=>({t:fmtDM(r.hora), v:r.resp_min}));
+
+  const dates=f.map(r=>r.hora).sort((a,b)=>a-b);
+  const agg={
+    total:f.length, con_coord:f.length, veh_total:f.reduce((s,r)=>s+r.n_veh,0),
+    resp_med:rt.length?+median(rt).toFixed(1):0, resp_mean:+mu.toFixed(1),
+    resp_p90:rt.length?+quantile(rt,0.9).toFixed(1):0, resp_max:rt.length?+Math.max(...rt).toFixed(1):0,
+    resp_sd:+sd.toFixed(1), pct_target:rt.length?Math.round(rt.filter(v=>v<=TARGET).length/rt.length*100):0,
+    target:TARGET,
+    fecha_ini:dates.length?fmtDMY(dates[0]):'—', fecha_fin:dates.length?fmtDMY(dates[dates.length-1]):'—',
+    center:[+median(lats).toFixed(5), +median(lons).toFixed(5)],
+    by_cat, by_day, by_hour:bh, ctrl,
+    ctrl_mu:+mu.toFixed(1), ctrl_ucl:+(mu+3*sd).toFixed(1), ctrl_lcl:+Math.max(0,mu-3*sd).toFixed(1)
+  };
+  return {agg, incidents:recs};
+}
+
+/* ================= ESTADO DE RENDER ================= */
+let A, INC, cats, colorOf={}, active, mode='markers';
+let map=null, markerLayer=null, heatLayer=null;
+const charts={};
+
+Chart.defaults.color='#8A94A3';Chart.defaults.font.family='Inter';Chart.defaults.font.size=11;
+const gridc='#232a34';
+function esc(v){return String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+
+function fmtPopup(d){
+  const rt=d.resp_min==null?'—':d.resp_min.toFixed(1)+' min';
+  const espec=d.subcategoria&&d.subcategoria!==d.categoria?`<br><span class="k">Tipo específico:</span> ${esc(d.subcategoria)}`:'';
+  return `<div class="pop"><b style="color:${d.color}">${esc(d.categoria)}</b>${espec}<br>
+    <span class="k">Clave</span> ${esc(d.clave||'—')} · <span class="k">${esc(d.hora)}</span><br>
+    <span class="k">Lugar:</span> ${esc(d.desc||d.sector)}<br>
+    <span class="k">Vehículos:</span> ${esc(d.veh||'—')}<br>
+    <span class="k">Respuesta:</span> ${rt}
+    ${d.narrativa?`<br><span class="k">Detalle:</span> ${esc(d.narrativa)}`:''}</div>`;
+}
+function drawMap(){
+  const shown = INC.filter(d=>active.has(d.categoria));
+  document.getElementById('maptag').textContent = shown.length+' de '+INC.length;
+  if(markerLayer && map.hasLayer(markerLayer)) map.removeLayer(markerLayer);
+  if(heatLayer && map.hasLayer(heatLayer)) map.removeLayer(heatLayer);
+  if(mode==='markers'){
+    markerLayer = L.markerClusterGroup({maxClusterRadius:34,spiderfyOnMaxZoom:true,
+      iconCreateFunction:c=>L.divIcon({html:`<div style="background:#e4322b;color:#fff;border-radius:50%;width:34px;height:34px;display:grid;place-items:center;font-family:'JetBrains Mono';font-weight:700;border:2px solid #ff6a5c">${c.getChildCount()}</div>`,className:'',iconSize:[34,34]})});
+    shown.forEach(d=>{
+      const m=L.circleMarker([d.lat,d.lon],{radius:7,color:'#0c0f14',weight:1.5,fillColor:d.color,fillOpacity:.92});
+      m.bindPopup(fmtPopup(d)); markerLayer.addLayer(m);
+    });
+    map.addLayer(markerLayer);
+  }else{
+    heatLayer=L.heatLayer(shown.map(d=>[d.lat,d.lon,0.8]),{radius:28,blur:20,maxZoom:14,
+      gradient:{0.2:'#2E7CE4',0.4:'#C6D400',0.65:'#F5871F',1:'#E4322B'}});
+    map.addLayer(heatLayer);
+  }
+}
+
+function renderAll(payload){
+  A = payload.agg; INC = payload.incidents;
+  document.getElementById('rango').textContent = A.fecha_ini + '  →  ' + A.fecha_fin;
+
+  /* KPIs */
+  const kpis=[
+   {lab:'Emergencias',val:A.total,sub:A.con_coord+' geolocalizadas',c:''},
+   {lab:'Vehículos despachados',val:A.veh_total,sub:(A.total?(A.veh_total/A.total).toFixed(1):'0')+' por evento',c:'k2'},
+   {lab:'Resp. mediana',val:A.resp_med,sub:'minutos (P50)',c:'k3'},
+   {lab:'Resp. P90',val:A.resp_p90,sub:'9 de 10 bajo este valor',c:'k4'},
+   {lab:'≤ '+A.target+' min',val:A.pct_target+'%',sub:'cumplen objetivo',c:'k5'},
+   {lab:'Resp. máxima',val:A.resp_max,sub:'minutos (peor caso)',c:'k6'},
+  ];
+  document.getElementById('kpis').innerHTML = kpis.map(k=>
+   `<div class="kpi ${k.c}"><div class="lab">${k.lab}</div><div class="val">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
+
+  /* map + legend state */
+  cats=[...new Set(INC.map(d=>d.categoria))];
+  colorOf={}; INC.forEach(d=>colorOf[d.categoria]=d.color);
+  active=new Set(cats);
+  document.getElementById('legend').innerHTML = cats.map(c=>
+   `<span class="chip" data-cat="${c}"><i style="background:${colorOf[c]}"></i>${c}</span>`).join('');
+  document.querySelectorAll('.chip[data-cat]').forEach(el=>{
+    el.onclick=()=>{const c=el.dataset.cat;
+      if(active.has(c)){active.delete(c);el.classList.add('off');}else{active.add(c);el.classList.remove('off');}
+      drawMap();};
+  });
+
+  if(!map){
+    map=L.map('map',{zoomControl:true,attributionControl:false}).setView(A.center,12);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+    L.control.attribution({prefix:false}).addAttribution('© OpenStreetMap · CARTO').addTo(map);
+  }else{
+    map.setView(A.center,12);
+  }
+  drawMap();
+
+  /* charts (destruye anteriores) */
+  Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});
+  charts.cat=new Chart(document.getElementById('catChart'),{type:'bar',
+   data:{labels:A.by_cat.map(d=>d.k),datasets:[{data:A.by_cat.map(d=>d.v),
+     backgroundColor:A.by_cat.map(d=>d.c),borderRadius:4,barThickness:14}]},
+   options:{indexAxis:'y',plugins:{legend:{display:false}},
+     scales:{x:{grid:{color:gridc},ticks:{precision:0}},y:{grid:{display:false},ticks:{font:{size:10.5}}}}}});
+  charts.day=new Chart(document.getElementById('dayChart'),{type:'bar',
+   data:{labels:A.by_day.map(d=>d.d.slice(5)),datasets:[{data:A.by_day.map(d=>d.v),
+     backgroundColor:'#E4322B',borderRadius:3}]},
+   options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:9.5}}},
+     y:{grid:{color:gridc},ticks:{precision:0}}}}});
+  charts.hour=new Chart(document.getElementById('hourChart'),{type:'bar',
+   data:{labels:[...Array(24).keys()].map(h=>String(h).padStart(2,'0')),
+     datasets:[{data:A.by_hour,backgroundColor:A.by_hour.map(v=>v?'#2E7CE4':'#1f2530'),borderRadius:2}]},
+   options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:9}}},
+     y:{grid:{color:gridc},ticks:{precision:0}}}}});
+  const cl=A.ctrl;
+  charts.ctrl=new Chart(document.getElementById('ctrlChart'),{type:'line',
+   data:{labels:cl.map(d=>d.t),datasets:[
+     {label:'Tiempo respuesta',data:cl.map(d=>d.v),borderColor:'#E8ECF2',backgroundColor:'#E8ECF2',
+      pointRadius:3,pointBackgroundColor:cl.map(d=>d.v>A.ctrl_ucl?'#E4322B':(d.v<=A.target?'#5fd08a':'#F5871F')),
+      pointBorderColor:'#0c0f14',tension:.15,borderWidth:1.4},
+     {label:'Media',data:cl.map(()=>A.ctrl_mu),borderColor:'#2E7CE4',borderDash:[6,4],pointRadius:0,borderWidth:1.2},
+     {label:'LCS (μ+3σ)',data:cl.map(()=>A.ctrl_ucl),borderColor:'#E4322B',borderDash:[4,4],pointRadius:0,borderWidth:1.2},
+     {label:'Objetivo '+A.target+'m',data:cl.map(()=>A.target),borderColor:'#5fd08a',borderDash:[2,3],pointRadius:0,borderWidth:1.2},
+   ]},
+   options:{plugins:{legend:{labels:{boxWidth:12,font:{size:10.5}}}},interaction:{mode:'index',intersect:false},
+     scales:{x:{grid:{display:false},ticks:{maxRotation:60,font:{size:8.5}}},
+       y:{grid:{color:gridc},title:{display:true,text:'minutos'}}}}});
+
+  document.getElementById('sixtag').textContent='μ='+A.ctrl_mu+' · σ='+A.resp_sd+' · LCS='+A.ctrl_ucl;
+  const outliers=cl.filter(d=>d.v>A.ctrl_ucl).length;
+  document.getElementById('sixnote').innerHTML=
+   `<b style="color:#e8ecf2">Lectura Six Sigma.</b> Media de respuesta ${A.resp_mean} min, desviación ${A.resp_sd} min. `+
+   `Límite de control superior (μ+3σ) = ${A.ctrl_ucl} min. Puntos fuera de control: <b>${outliers}</b>. `+
+   `${A.pct_target}% de los arribos cumplen el objetivo de ${A.target} min.`;
+
+  /* tabla */
+  document.getElementById('tabletag').textContent=INC.length+' registros';
+  const tb=document.querySelector('#tbl tbody'); tb.innerHTML='';
+  INC.slice().sort((a,b)=>a.hora<b.hora?1:-1).forEach(d=>{
+    const rt=d.resp_min==null?'<span style="color:#5C6675">—</span>':
+      `<span class="mono ${d.resp_min<=A.target?'rt-ok':'rt-bad'}">${d.resp_min.toFixed(1)}</span>`;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="mono" style="color:#B8C0CC">${d.hora}</td>
+      <td class="mono">${esc(d.clave||'—')}</td>
+      <td><span class="pill" style="background:${d.color}">${esc(d.categoria)}</span>${d.subcategoria&&d.subcategoria!==d.categoria?`<div class="subcat">${esc(d.subcategoria)}</div>`:''}</td>
+      <td style="color:#B8C0CC">${esc(d.sector||'—')}</td>
+      <td class="mono" style="text-align:center">${d.n_veh}</td>
+      <td style="text-align:center">${rt}</td>
+      <td style="color:#96A0AE;max-width:320px">${esc(d.desc||d.narrativa||'—')}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* modo mapa */
+document.querySelectorAll('.tbtn').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tbtn').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');mode=b.dataset.mode;drawMap();});
+
+/* ================= PANEL DE CARGA ================= */
+let RAW_INCIDENTS=null;   // incidentes crudos del último CSV cargado
+const $=(id)=>document.getElementById(id);
+$('csvInput').addEventListener('change', e=>{
+  const file=e.target.files[0]; if(!file) return;
+  $('fileName').textContent='📄 '+file.name;
+  $('status').className='status'; $('status').textContent='Leyendo archivo…';
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const rows=parseBitacora(reader.result);
+      RAW_INCIDENTS=extractIncidents(rows);
+      $('goBtn').disabled = RAW_INCIDENTS.length===0;
+      if(RAW_INCIDENTS.length){
+        // sugiere rango de fechas del archivo
+        const ds=RAW_INCIDENTS.map(x=>fechaStr(x.hora)).sort();
+        $('desde').value=''; $('hasta').value='';
+        $('desde').min=ds[0]; $('desde').max=ds[ds.length-1];
+        $('hasta').min=ds[0]; $('hasta').max=ds[ds.length-1];
+        const payload=buildPayload(RAW_INCIDENTS,null,null);
+        renderAll(payload);
+        $('status').className='status ok';
+        $('status').textContent=`✓ Tablero actualizado automáticamente: ${rows.length.toLocaleString()} filas · ${payload.incidents.length} incidentes (${payload.agg.fecha_ini} → ${payload.agg.fecha_fin}). Usa Desde/Hasta y «Actualizar tablero» para acotar.`;
+        document.querySelector('header').scrollIntoView({behavior:'smooth'});
+      }else{
+        $('status').className='status err';
+        $('status').textContent='No se detectaron incidentes con coordenadas en este archivo. ¿Es una bitácora de despacho CBMEL?';
+      }
+    }catch(err){
+      $('status').className='status err';
+      $('status').textContent='Error al procesar el CSV: '+err.message;
+      $('goBtn').disabled=true;
+    }
+  };
+  reader.onerror=()=>{ $('status').className='status err'; $('status').textContent='No se pudo leer el archivo.'; };
+  reader.readAsText(file, 'utf-8');
+});
+$('goBtn').addEventListener('click', ()=>{
+  if(!RAW_INCIDENTS) return;
+  const desde=$('desde').value||null, hasta=$('hasta').value||null;
+  const payload=buildPayload(RAW_INCIDENTS, desde, hasta);
+  if(!payload.incidents.length){
+    $('status').className='status err';
+    $('status').textContent='El filtro de fechas no dejó ningún incidente. Amplía el rango.';
+    return;
+  }
+  renderAll(payload);
+  $('status').className='status ok';
+  $('status').textContent=`✓ Tablero actualizado: ${payload.incidents.length} incidentes (${payload.agg.fecha_ini} → ${payload.agg.fecha_fin}).`;
+  document.querySelector('header').scrollIntoView({behavior:'smooth'});
+});
+
+/* ================= INICIO ================= */
+renderAll(INITIAL);
+</script>
+</body>
+</html>
